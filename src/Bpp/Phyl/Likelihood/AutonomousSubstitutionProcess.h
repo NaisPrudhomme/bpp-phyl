@@ -1,12 +1,12 @@
 //
-// File: AbstractCodonFrequenciesSubstitutionModel.cpp
-// Authors:
-//   Laurent Gueguen
-// Created: jeudi 15 septembre 2011, ÃÂ  15h 02
+// File: AutonomousSubstitutionProcess.h
+// Authors: Laurent Guéguen
+// Created: jeudi 16 décembre 2021, à 21h 39
 //
 
 /*
-  Copyright or ÃÂ© or Copr. CNRS, (November 16, 2004)
+  Copyright or ÃÂ© or Copr. Bio++ Development Team, (November 16, 2004)
+  
   This software is a computer program whose purpose is to provide classes
   for phylogenetic data analysis.
   
@@ -37,45 +37,51 @@
   knowledge of the CeCILL license and that you accept its terms.
 */
 
+#ifndef BPP_PHYL_LIKELIHOOD_AUTONOMOUS_SUBSTITUTIONPROCESS_H
+#define BPP_PHYL_LIKELIHOOD_AUTONOMOUS_SUBSTITUTIONPROCESS_H
 
-#include "AbstractCodonFrequenciesSubstitutionModel.h"
 
-using namespace bpp;
-using namespace std;
+#include "SubstitutionProcess.h"
 
-/******************************************************************************/
+// From the STL:
+#include <memory>
 
-AbstractCodonFrequenciesSubstitutionModel::AbstractCodonFrequenciesSubstitutionModel(
-  std::shared_ptr<FrequencySet> pfreq,
-  const std::string& prefix) :
-  AbstractParameterAliasable(prefix),
-  pfreqset_(pfreq),
-  freqName_("")
+namespace bpp
 {
-  if (dynamic_cast<CodonFrequencySet*>(pfreq.get()) == NULL)
-    throw Exception("Bad type for equilibrium frequencies " + pfreq->getName());
+/**
+ * @brief Interface for SubstitutionProcess objects that own their own
+ * ParametrizablePhyloTree & Scenario.
+ *
+ */
+  class AutonomousSubstitutionProcess :
+    public virtual SubstitutionProcess
+  {
+  public:
 
-  freqName_ = pfreqset_->getNamespace();
-  pfreqset_->setNamespace(prefix + freqName_);
-  addParameters_(pfreqset_->getParameters());
-}
+    /**
+     * @brief set the ParametrizablePhyloTree.
+     *
+     * Will build a unique_ptr<ParametrizablePhyloTree> from the given PhyloTree
+     *
+     * @param phyloTree Tree, in the form of PhyloTree, to be associated with this instance.
+     */
+    virtual void setPhyloTree(const PhyloTree& phyloTree) = 0;
 
-AbstractCodonFrequenciesSubstitutionModel::~AbstractCodonFrequenciesSubstitutionModel()
-{}
+    /**
+     * @brief set the RootFrequency.
+     *
+     * @param rootfrequency The root frequencies to be associated with this instance.
+     */
+    virtual void setRootFrequencySet(std::shared_ptr<FrequencySet> rootfrequency) = 0;
 
-void AbstractCodonFrequenciesSubstitutionModel::fireParameterChanged(const ParameterList& parameters)
-{
-  pfreqset_->matchParametersValues(parameters);
-}
+    /**
+     * @brief set the ModelScenario.
+     *
+     * @param modelScenario The scenario to be associated with this instance.
+     */
+    virtual void setModelScenario(std::shared_ptr<ModelScenario> modelScenario) = 0;
 
+  };
+} // end namespace bpp
 
-void AbstractCodonFrequenciesSubstitutionModel::setFreq(map<int, double>& frequencies)
-{
-  pfreqset_->setFrequenciesFromAlphabetStatesFrequencies(frequencies);
-  matchParametersValues(pfreqset_->getParameters());
-}
-
-double AbstractCodonFrequenciesSubstitutionModel::getCodonsMulRate(size_t i, size_t j) const
-{
-  return pfreqset_->getFrequencies()[j];
-}
+#endif // BPP_PHYL_LIKELIHOOD_AUTONOMOUS_SUBSTITUTIONPROCESS_H

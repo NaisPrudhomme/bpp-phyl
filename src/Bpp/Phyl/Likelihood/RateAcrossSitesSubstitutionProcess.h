@@ -42,7 +42,7 @@
 #define BPP_PHYL_LIKELIHOOD_RATEACROSSSITESSUBSTITUTIONPROCESS_H
 
 
-#include "AbstractSubstitutionProcess.h"
+#include "AbstractAutonomousSubstitutionProcess.h"
 
 // From bpp-core:
 #include <Bpp/Numeric/AbstractParameterAliasable.h>
@@ -53,7 +53,7 @@
 namespace bpp
 {
 class RateAcrossSitesSubstitutionProcess :
-  public AbstractSubstitutionProcess
+  public AbstractAutonomousSubstitutionProcess
 {
 private:
   std::shared_ptr<BranchModel> model_;
@@ -63,7 +63,14 @@ public:
   RateAcrossSitesSubstitutionProcess(
     std::shared_ptr<BranchModel> model,
     std::shared_ptr<DiscreteDistribution> rdist,
-    ParametrizablePhyloTree* tree);
+    std::shared_ptr<const PhyloTree> tree = 0,
+    std::shared_ptr<FrequencySet> rootFrequencies = 0);
+
+  RateAcrossSitesSubstitutionProcess(
+    std::shared_ptr<BranchModel> model,
+    std::shared_ptr<DiscreteDistribution> rdist,
+    std::shared_ptr<ParametrizablePhyloTree> tree,
+    std::shared_ptr<FrequencySet> rootFrequencies = 0);
 
   RateAcrossSitesSubstitutionProcess(const RateAcrossSitesSubstitutionProcess& rassp);
 
@@ -72,8 +79,6 @@ public:
 public:
   RateAcrossSitesSubstitutionProcess* clone() const { return new RateAcrossSitesSubstitutionProcess(*this); }
 
-  size_t getNumberOfStates() const { return model_->getNumberOfStates(); }
-
   size_t getNumberOfModels() const { return 1; }
 
   std::vector<size_t> getModelNumbers() const
@@ -81,24 +86,19 @@ public:
     return std::vector<size_t>(1, 1);
   }
 
-  bool isCompatibleWith(const AlignedValuesContainer& data) const
-  {
-    return data.getAlphabet()->getAlphabetType() == model_->getAlphabet()->getAlphabetType();
-  }
-
   const StateMap& getStateMap() const
   {
     return model_->getStateMap();
   }
 
-  const BranchModel* getModel(size_t n) const
+  std::shared_ptr<const BranchModel> getModel(size_t n) const
   {
-    return model_.get();
+    return model_;
   }
 
-  const BranchModel* getModel(unsigned int nodeId, size_t classIndex) const
+  std::shared_ptr<const BranchModel> getModel(unsigned int nodeId, size_t classIndex) const
   {
-    return model_.get();
+    return model_;
   }
 
   const std::vector<unsigned int> getNodesWithModel(size_t i) const
@@ -112,14 +112,14 @@ public:
     return 1;
   }
 
-  const BranchModel* getModelForNode(unsigned int nodeId) const
+  std::shared_ptr<const BranchModel> getModelForNode(unsigned int nodeId) const
   {
-    return model_.get();
+    return model_;
   }
 
-  const DiscreteDistribution* getRateDistribution() const
+  std::shared_ptr<const DiscreteDistribution> getRateDistribution() const
   {
-    return rDist_.get();
+    return rDist_;
   }
 
   ParameterList getSubstitutionModelParameters(bool independent) const
@@ -132,27 +132,25 @@ public:
     return independent ? rDist_->getIndependentParameters() : rDist_->getParameters();
   }
 
-  ParameterList getRootFrequenciesParameters(bool independent) const
-  {
-    return ParameterList();
-  }
-
   ParameterList getBranchLengthParameters(bool independent) const
   {
-    return getParametrizablePhyloTree().getParameters();
-  }
-
-  std::shared_ptr<const FrequencySet> getRootFrequencySet() const
-  {
-    return std::shared_ptr<const FrequencySet>(0);
+    if (getParametrizablePhyloTree())
+      return getParametrizablePhyloTree()->getParameters();
+    else
+      return ParameterList();
   }
 
   const std::vector<double>& getRootFrequencies() const
   {
-    if (std::dynamic_pointer_cast<const TransitionModel>(model_))
-      return std::dynamic_pointer_cast<const TransitionModel>(model_)->getFrequencies();
+    if (!hasRootFrequencySet())
+    {
+      if (std::dynamic_pointer_cast<const TransitionModel>(model_))
+        return std::dynamic_pointer_cast<const TransitionModel>(model_)->getFrequencies();
+      else
+        throw Exception("SimpleSubstitutionProcess::getRootFrequencies not possible with a non Transition Model.");
+    }
     else
-      throw Exception("RateAcrossSitesSubstitutionProcess::getRootFrequencies not possible with a non Transition Model.");
+      return getRootFrequencySet()->getFrequencies();
   }
 
   /**
@@ -162,11 +160,6 @@ public:
    */
 
   void setModelScenario(std::shared_ptr<ModelScenario> modelpath);
-
-  double getInitValue(size_t i, int state) const
-  {
-    return model_->getInitValue(i, state);
-  }
 
   double getProbabilityForModel(size_t classIndex) const
   {

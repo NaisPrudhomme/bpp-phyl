@@ -93,7 +93,7 @@ public:
 
   virtual bool isCompatibleWith(const AlignedValuesContainer& data) const = 0;
 
-  virtual const ParametrizablePhyloTree& getParametrizablePhyloTree() const = 0;
+  virtual std::shared_ptr<const ParametrizablePhyloTree> getParametrizablePhyloTree() const = 0;
 
   virtual size_t getNumberOfClasses() const = 0;
 
@@ -115,7 +115,7 @@ public:
    * @return the model with given index.
    */
 
-  virtual const BranchModel* getModel(size_t i) const = 0;
+  virtual std::shared_ptr<const BranchModel> getModel(size_t i) const = 0;
 
   /**
    * @brief Get the substitution model corresponding to a certain
@@ -125,7 +125,7 @@ public:
    * @param classIndex The model class index.
    */
 
-  virtual const BranchModel* getModel(unsigned int nodeId, size_t classIndex) const = 0;
+  virtual std::shared_ptr<const BranchModel> getModel(unsigned int nodeId, size_t classIndex) const = 0;
 
   /**
    * @brief Get the Model Scenario associated with this process, in
@@ -140,9 +140,7 @@ public:
    *
    */
 
-  virtual bool hasModelScenario() const = 0;
-
-  virtual const ModelScenario& getModelScenario() const = 0;
+  virtual std::shared_ptr<const ModelScenario> getModelScenario() const = 0;
 
   /**
    * @brief Get a list of nodes id for which the given model is associated.
@@ -173,7 +171,7 @@ public:
    * @throw Exception If no model is found for this node.
    */
 
-  virtual const BranchModel* getModelForNode(unsigned int nodeId) const = 0;
+  virtual std::shared_ptr<const BranchModel> getModelForNode(unsigned int nodeId) const = 0;
 
   /**
    * @brief Get a pointer to the rate distribution (or null if there
@@ -181,7 +179,7 @@ public:
    *
    */
 
-  virtual const DiscreteDistribution* getRateDistribution() const = 0;
+  virtual std::shared_ptr<const DiscreteDistribution> getRateDistribution() const = 0;
 
   /**
    * @brief Methods to retrieve the parameters of specific objects.
@@ -199,36 +197,6 @@ public:
   virtual ParameterList getNonDerivableParameters() const = 0;
 
   /**
-   * @brief Get the transition probabilities corresponding to a
-   * certain branch, and model class.
-   *
-   * @param nodeId The id of the node.
-   * @param classIndex The model class index.
-   */
-
-  virtual const Matrix<double>& getTransitionProbabilities(unsigned int nodeId, size_t classIndex) const = 0;
-
-  /**
-   * @brief Get the first order derivatives of the transition
-   * probabilities according to time, corresponding to a certain
-   * branch, and model class.
-   *
-   * @param nodeId The id of the node.
-   * @param classIndex The model class index.
-   */
-  virtual const Matrix<double>& getTransitionProbabilitiesD1(unsigned int nodeId, size_t classIndex) const = 0;
-
-  /**
-   * @brief Get the second order derivatives of the transition
-   * probabilities according to time, corresponding to a certain
-   * branch, and model class.
-   *
-   * @param nodeId The id of the node.
-   * @param classIndex The model class index.
-   */
-  virtual const Matrix<double>& getTransitionProbabilitiesD2(unsigned int nodeId, size_t classIndex) const = 0;
-
-  /**
    * @brief Get the values of the frequencies for each state in the
    * alphabet at the root node.
    *
@@ -239,22 +207,15 @@ public:
    */
   virtual const std::vector<double>& getRootFrequencies() const = 0;
 
-  virtual std::shared_ptr<const FrequencySet> getRootFrequencySet() const = 0;
+  /**
+   * @return true if the process has parametrized root frequencies (non-stationary model)
+   */
+  virtual bool hasRootFrequencySet() const = 0;
 
   /**
-   * This method is used to initialize likelihoods in reccursions.
-   * It typically sends 1 if i = state, 0 otherwise, where
-   * i is one of the possible states of the alphabet allowed in the model
-   * and state is the observed state in the considered sequence/site.
-   *
-   * @param i the index of the state in the model.
-   * @param state An observed state in the sequence/site.
-   * @return 1 or 0 depending if the two states are compatible.
-   * @throw BadIntException if states are not allowed in the associated alphabet.
-   * @see getStates();
-   * @see SubstitutionModel
+   * @return The set of parametrized root frequencies.
    */
-  virtual double getInitValue(size_t i, int state) const = 0;
+  virtual std::shared_ptr<const FrequencySet> getRootFrequencySet() const = 0;
 
   /**
    * @return The probability associated to the given model class.

@@ -48,9 +48,31 @@ using namespace std;
 RateAcrossSitesSubstitutionProcess::RateAcrossSitesSubstitutionProcess(
   shared_ptr<BranchModel> model,
   shared_ptr<DiscreteDistribution> rdist,
-  ParametrizablePhyloTree* tree) :
+  std::shared_ptr<const PhyloTree> tree,
+  std::shared_ptr<FrequencySet> rootFrequencies) :
   AbstractParameterAliasable(""),
-  AbstractSubstitutionProcess(tree, rdist ? rdist->getNumberOfCategories() : 0, model ? model->getNamespace() : ""),
+  AbstractAutonomousSubstitutionProcess(tree, rootFrequencies, model ? model->getNamespace() : ""),
+  model_(model),
+  rDist_(rdist)
+{
+  if (!model)
+    throw Exception("RateAcrossSitesSubstitutionProcess. A model instance must be provided.");
+  if (!rdist)
+    throw Exception("RateAcrossSitesSubstitutionProcess. A rate distribution instance must be provided.");
+
+  addParameters_(model->getIndependentParameters()); // Substitution model
+
+  addParameters_(rdist->getIndependentParameters()); // Rate
+                                                     // distribution
+}
+
+RateAcrossSitesSubstitutionProcess::RateAcrossSitesSubstitutionProcess(
+  shared_ptr<BranchModel> model,
+  shared_ptr<DiscreteDistribution> rdist,
+  std::shared_ptr<ParametrizablePhyloTree> tree,
+  std::shared_ptr<FrequencySet> rootFrequencies) :
+  AbstractParameterAliasable(""),
+  AbstractAutonomousSubstitutionProcess(tree, rootFrequencies, model ? model->getNamespace() : ""),
   model_(model),
   rDist_(rdist)
 {
@@ -67,7 +89,7 @@ RateAcrossSitesSubstitutionProcess::RateAcrossSitesSubstitutionProcess(
 
 RateAcrossSitesSubstitutionProcess::RateAcrossSitesSubstitutionProcess(const RateAcrossSitesSubstitutionProcess& rassp) :
   AbstractParameterAliasable(rassp),
-  AbstractSubstitutionProcess(rassp),
+  AbstractAutonomousSubstitutionProcess(rassp),
   model_(rassp.model_->clone()),
   rDist_(rassp.rDist_->clone())
 {
@@ -79,7 +101,7 @@ RateAcrossSitesSubstitutionProcess::RateAcrossSitesSubstitutionProcess(const Rat
 RateAcrossSitesSubstitutionProcess& RateAcrossSitesSubstitutionProcess::operator=(const RateAcrossSitesSubstitutionProcess& rassp)
 {
   AbstractParameterAliasable::operator=(rassp);
-  AbstractSubstitutionProcess::operator=(rassp);
+  AbstractAutonomousSubstitutionProcess::operator=(rassp);
   model_.reset(rassp.model_->clone());
   rDist_.reset(rassp.rDist_->clone());
 
@@ -112,5 +134,5 @@ void RateAcrossSitesSubstitutionProcess::fireParameterChanged(const ParameterLis
   model_->matchParametersValues(pl);
 
   // Transition probabilities have changed and need to be recomputed:
-  AbstractSubstitutionProcess::fireParameterChanged(pl);
+  AbstractAutonomousSubstitutionProcess::fireParameterChanged(pl);
 }

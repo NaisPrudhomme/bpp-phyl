@@ -212,14 +212,12 @@ public:
    * @throw Exception if the number is already used. See replace
    * function instead.
    *
-   * @param parametrizable A pointer toward a parametrizable, that will added to
+   * @param parametrizable A shared pointer toward a parametrizable, that will added to
    * the collection.
    *
-   * WARNING! The collection will now be the owner of the pointer, and will destroy it if needed!
-   * Copy the parametrizable first if you don't want it to be lost!
-
    * @param parametrizableIndex The number of the parametrizable in
-   * the Collection
+   * the Collection. Must be >= 1.
+   *
    * @param withParameters boolean if the parameters of the object
    *         should be added (default: true)
    *
@@ -310,6 +308,7 @@ public:
    * @param frequenciesIndex The index of the frequencies set in the collection.
    * @return the got FrequencySet*.
    */
+
   FrequencySet& getFrequencies(size_t frequenciesIndex)
   {
     return *freqColl_[frequenciesIndex];
@@ -336,14 +335,14 @@ public:
    * @param distributionIndex The index of the distribution in the collection.
    * @return the got DiscreteDistribution*.
    */
-  DiscreteDistribution& getRateDistribution(size_t distributionIndex)
+  std::shared_ptr<DiscreteDistribution> getRateDistribution(size_t distributionIndex)
   {
-    return *(dynamic_cast<DiscreteDistribution*>(distColl_[distributionIndex].get()));
+    return distColl_[distributionIndex];
   }
 
-  const DiscreteDistribution& getRateDistribution(size_t distributionIndex) const
+  std::shared_ptr<const DiscreteDistribution> getRateDistribution(size_t distributionIndex) const
   {
-    return *(dynamic_cast<const DiscreteDistribution*>(distColl_[distributionIndex].get()));
+    return distColl_[distributionIndex];
   }
 
   /**
@@ -352,14 +351,15 @@ public:
    * @param treeIndex The index of the model in the set.
    * @return the got ParametrizablePhyloTree.
    */
-  ParametrizablePhyloTree& getTree(size_t treeIndex)
+
+  std::shared_ptr<ParametrizablePhyloTree> getTree(size_t treeIndex)
   {
-    return *(dynamic_cast<ParametrizablePhyloTree*>(treeColl_[treeIndex].get()));
+    return std::dynamic_pointer_cast<ParametrizablePhyloTree>(treeColl_[treeIndex]);
   }
 
-  const ParametrizablePhyloTree& getTree(size_t treeIndex) const
+  std::shared_ptr<const ParametrizablePhyloTree> getTree(size_t treeIndex) const
   {
-    return *(dynamic_cast<const ParametrizablePhyloTree*>(treeColl_[treeIndex].get()));
+    return std::dynamic_pointer_cast<const ParametrizablePhyloTree>(treeColl_[treeIndex]);
   }
 
   /**
@@ -378,9 +378,20 @@ public:
    * @param numPath The number of the model path in the set.
    * @return the matching ModelScenario.
    */
-  const ModelScenario& getModelScenario(size_t numPath) const
+  std::shared_ptr<const ModelScenario> getModelScenario(size_t numPath) const
   {
-    return *mModelScenario_.at(numPath);
+    if (!hasModelScenario(numPath))
+      return 0;
+    else
+      return mModelScenario_.at(numPath);
+  }
+
+  std::shared_ptr<ModelScenario> getModelScenario(size_t numPath)
+  {
+    if (!hasModelScenario(numPath))
+      return 0;
+    else
+      return mModelScenario_.at(numPath);
   }
 
   std::vector<size_t> getScenarioNumbers() const
@@ -602,8 +613,6 @@ public:
     else
       return pl;
   }
-
-  bool hasBranchLengthParameter(const std::string& name) const;
 
   /**
    * @brief Get the parameters associated to substitution process(es).

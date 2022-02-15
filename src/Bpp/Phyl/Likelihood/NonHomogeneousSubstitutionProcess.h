@@ -43,7 +43,7 @@
 
 
 #include "../Model/FrequencySet/FrequencySet.h"
-#include "AbstractSubstitutionProcess.h"
+#include "AbstractAutonomousSubstitutionProcess.h"
 
 // From bpp-core:
 #include <Bpp/Exceptions.h>
@@ -64,7 +64,7 @@ namespace bpp
  * non-reversible models of evolution.
  *
  * This class contains a set of substitution models, and their
- * assigment toward the branches of a phylogenetic tree. Each branch
+ * assignment toward the branches of a phylogenetic tree. Each branch
  * in the tree corresponds to a model in the set, but a susbstitution
  * model may correspond to several branches. The particular case where
  * all branches point toward a unique model is the homogeneous case.
@@ -74,8 +74,9 @@ namespace bpp
  * deal with this issue, the NonHomogeneousSubstitutionProcess class
  * contains its own parameter list and an index which tells to which
  * models these parameters apply to. Since parameters in a list must
- * have unique names, the names are numbered according to the order of
- * the model in the list.
+ * have unique names, the names are suffixed with numbers according to
+ * the order of the model in the list.
+ *
  * To track the relationships between names in the list and names in
  * each model, the parameter list is duplicated in modelParameters_.
  * The user only act on parameters_, the fireParameterChanged
@@ -111,7 +112,7 @@ namespace bpp
 
 
 class NonHomogeneousSubstitutionProcess :
-  public AbstractSubstitutionProcess
+  public AbstractAutonomousSubstitutionProcess
 {
 private:
   /**
@@ -119,11 +120,6 @@ private:
    */
 
   std::vector<std::shared_ptr<BranchModel> > modelSet_;
-
-  /**
-   * @brief Root frequencies.
-   */
-  std::shared_ptr<FrequencySet> rootFrequencies_;
 
   /**
    *  @brief Rate Distribution
@@ -141,9 +137,29 @@ private:
    */
   std::vector<ParameterList> modelParameters_;
 
-  bool stationarity_;
-
 public:
+  /**
+   * @brief Create a model set according to the specified alphabet and root frequencies.
+   * Stationarity is not assumed.
+   *
+   * @param rdist  The DiscreteDistribution for the rates
+   * @param tree the phylo tree tree
+   * @param rootFreqs The frequencies at root node. The underlying object will be owned by this instance ( = 0 if stationary)
+   */
+
+  NonHomogeneousSubstitutionProcess(std::shared_ptr<DiscreteDistribution>  rdist, std::shared_ptr<const PhyloTree> tree = 0, std::shared_ptr<FrequencySet> rootFreqs = 0) :
+    AbstractParameterAliasable(""),
+    AbstractAutonomousSubstitutionProcess(tree, rootFreqs),
+    modelSet_(),
+    rDist_(rdist),
+    nodeToModel_(),
+    modelToNodes_(),
+    modelParameters_()
+  {
+    if (rDist_)
+      addParameters_(rDist_->getIndependentParameters());
+  }
+  
   /**
    * @brief Create a model set according to the specified alphabet and root frequencies.
    * Stationarity is not assumed.
@@ -153,21 +169,17 @@ public:
    * @param rootFreqs The frequencies at root node. The underlying object will be owned by this instance ( = 0 if stationary)
    */
 
-  NonHomogeneousSubstitutionProcess(std::shared_ptr<DiscreteDistribution>  rdist, ParametrizablePhyloTree* tree, FrequencySet* rootFreqs = nullptr) :
+  NonHomogeneousSubstitutionProcess(std::shared_ptr<DiscreteDistribution>  rdist, std::shared_ptr<ParametrizablePhyloTree> tree, std::shared_ptr<FrequencySet> rootFreqs = 0) :
     AbstractParameterAliasable(""),
-    AbstractSubstitutionProcess(tree, rdist ? rdist->getNumberOfCategories() : 1),
+    AbstractAutonomousSubstitutionProcess(tree, rootFreqs),
     modelSet_(),
-    rootFrequencies_(),
     rDist_(rdist),
     nodeToModel_(),
     modelToNodes_(),
-    modelParameters_(),
-    stationarity_(rootFreqs == nullptr)
+    modelParameters_()
   {
     if (rDist_)
       addParameters_(rDist_->getIndependentParameters());
-    if (!stationarity_)
-      setRootFrequencies(rootFreqs);
   }
 
   NonHomogeneousSubstitutionProcess(const NonHomogeneousSubstitutionProcess& set);
@@ -196,19 +208,6 @@ public:
    * @param parameters The modified parameters.
    */
   void fireParameterChanged(const ParameterList& parameters);
-
-  /**
-   * @brief Get the alphabet
-   * @throw Exception if no model is associated to the set.
-   *
-   */
-  const Alphabet* getAlphabet() const
-  {
-    if (modelSet_.size() == 0)
-      throw Exception("NonHomogeneousSubstitutionProcess::getAlphabet : no model associated");
-    else
-      return modelSet_[0]->getAlphabet();
-  }
 
   const StateMap& getStateMap() const
   {
@@ -250,16 +249,16 @@ public:
    * @param n number of the model.
    * @return A pointer toward the corresponding model.
    */
-  const BranchModel* getModel(size_t n) const
+  std::shared_ptr<const BranchModel> getModel(size_t n) const
   {
     if ((n == 0) || (n > modelSet_.size())) throw IndexOutOfBoundsException("NonHomogeneousSubstitutionProcess::getModel().", 1, modelSet_.size(), n);
-    return modelSet_[n - 1].get();
+    return modelSet_[n - 1];
   }
 
-  BranchModel* getModel(size_t n)
+  std::shared_ptr<const BranchModel> getModel(size_t n)
   {
     if ((n == 0) || (n > modelSet_.size())) throw IndexOutOfBoundsException("NonHomogeneousSubstitutionProcess::getModel().", 1, modelSet_.size(), n);
-    return modelSet_[n - 1].get();
+    return modelSet_[n - 1];
   }
 
   /**
@@ -285,12 +284,12 @@ public:
    * @return A pointer toward the corresponding model.
    * @throw Exception If no model is found for this node.
    */
-  const BranchModel* getModelForNode(unsigned int nodeId) const
+  std::shared_ptr<const BranchModel> getModelForNode(unsigned int nodeId) const
   {
     std::map<unsigned int, size_t>::const_iterator i = nodeToModel_.find(nodeId);
     if (i == nodeToModel_.end())
       throw Exception("NonHomogeneousSubstitutionProcess::getModelForNode(). No model associated to node with id " + TextTools::toString(nodeId));
-    return modelSet_[i->second].get();
+    return modelSet_[i->second];
   }
 
   /**
@@ -356,39 +355,12 @@ public:
 
   void listModelNames(std::ostream& out = std::cout) const;
 
-  /**
-   * @brief Sets a given FrequencySet for root frequencies.
-   *
-   * @param rootFreqs The FrequencySet for root frequencies.
-   */
-
-  void setRootFrequencies(FrequencySet* rootFreqs);
-
-  /**
-   * @return The set of root frequencies.
-   *
-   */
-  std::shared_ptr<const FrequencySet> getRootFrequencySet() const
-  {
-    return rootFrequencies_;
-  }
-
-  /**
-   * @brief Get the parameters corresponding to the root frequencies.
-   *
-   * @return The parameters corresponding to the root frequencies.
-   */
-  ParameterList getRootFrequenciesParameters(bool independent) const
-  {
-    if (stationarity_)
-      return ParameterList();
-    else
-      return rootFrequencies_->getParameters();
-  }
-
   ParameterList getBranchLengthParameters(bool independent) const
   {
-    return getParametrizablePhyloTree().getParameters();
+    if (getParametrizablePhyloTree())
+      return getParametrizablePhyloTree()->getParameters();
+    else
+      return ParameterList();
   }
 
   /**
@@ -400,9 +372,9 @@ public:
     return rDist_.get() ? (independent ? rDist_->getIndependentParameters() : rDist_->getParameters()) : ParameterList();
   }
 
-  const DiscreteDistribution* getRateDistribution() const
+  std::shared_ptr<const DiscreteDistribution> getRateDistribution() const
   {
-    return rDist_ ? rDist_.get() : 0;
+    return rDist_ ? rDist_ : 0;
   }
 
   /**
@@ -429,14 +401,6 @@ public:
   }
 
 protected:
-  /**
-   * Set rootFrequencies_ from parameters.
-   */
-  void updateRootFrequencies()
-  {
-    if (!stationarity_)
-      rootFrequencies_->matchParametersValues(getParameters());
-  }
 
   /**
    * @name Check function.
@@ -448,35 +412,20 @@ protected:
   bool checkUnknownNodes(bool throwEx) const;
 
 public:
-  /*
-   * Inheriting from SubstitutionProcess
-   */
-
-  bool isCompatibleWith(const AlignedValuesContainer& data) const;
-
-  /**
-   * @brief Get the number of states associated to this model set.
-   *
-   * @return The number of states, or 0 if no model is associated to
-   * the set.
-   */
-  size_t getNumberOfStates() const
-  {
-    if (modelSet_.size() == 0)
-      return 0;
-    else
-      return modelSet_[0]->getNumberOfStates();
-  }
-
   /**
    * @return The values of the root frequencies.
    */
   const std::vector<double>& getRootFrequencies() const
   {
-    if (stationarity_ && std::dynamic_pointer_cast<const TransitionModel>(modelSet_[0]))
-      return std::dynamic_pointer_cast<const TransitionModel>(modelSet_[0])->getFrequencies();
+    if (!hasRootFrequencySet())
+    {
+      if (std::dynamic_pointer_cast<const TransitionModel>(modelSet_[0]))
+        return std::dynamic_pointer_cast<const TransitionModel>(modelSet_[0])->getFrequencies();
+      else
+        throw Exception("NonHomogeneousSubstitutionProcess::getRootFrequencies not callable.");
+    }
     else
-      return rootFrequencies_->getFrequencies();
+      return getRootFrequencySet()->getFrequencies();
   }
 
   /**
@@ -485,37 +434,9 @@ public:
    * @param nodeId The id of the node.
    * @param classIndex The model class index.
    */
-  const BranchModel* getModel(unsigned int nodeId, size_t classIndex) const
+  std::shared_ptr<const BranchModel> getModel(unsigned int nodeId, size_t classIndex) const
   {
-    return modelSet_[nodeToModel_[nodeId]].get();
-  }
-
-  // const Matrix<double>& getGenerator(unsigned int nodeId, size_t classIndex) const
-  // {
-  //   return getSubstitutionModel(nodeId, classIndex).getGenerator();
-  // }
-
-  /**
-   * This method is used to initialize likelihoods in reccursions.
-   * It typically sends 1 if i = state, 0 otherwise, where
-   * i is one of the possible states of the alphabet allowed in the model
-   * and state is the observed state in the considered sequence/site.
-   *
-   * The model used is the first one in the list of the models.
-   *
-   * @param i the index of the state in the model.
-   * @param state An observed state in the sequence/site.
-   * @return 1 or 0 depending if the two states are compatible.
-   * @throw BadIntException if states are not allowed in the associated alphabet.
-   * @see getStates();
-   * @see BranchModel
-   */
-  double getInitValue(size_t i, int state) const
-  {
-    if (modelSet_.size() == 0)
-      throw Exception("NonHomogeneousSubstitutionProcess::getInitValue : no model associated");
-    else
-      return modelSet_[0]->getInitValue(i, state);
+    return modelSet_[nodeToModel_[nodeId]];
   }
 
   double getProbabilityForModel(size_t classIndex) const
@@ -566,10 +487,10 @@ public:
    * @param scenario (optional) the scenario used (in case of Mixed Models)
    */
 
-  static NonHomogeneousSubstitutionProcess* createHomogeneousSubstitutionProcess(
+  static AbstractAutonomousSubstitutionProcess* createHomogeneousSubstitutionProcess(
     std::shared_ptr<BranchModel> model,
     std::shared_ptr<DiscreteDistribution> rdist,
-    ParametrizablePhyloTree* tree,
+    std::shared_ptr<PhyloTree> tree,
     std::shared_ptr<FrequencySet> rootFreqs = 0,
     std::shared_ptr<ModelScenario> scenario = 0
     );
@@ -593,7 +514,7 @@ public:
   static NonHomogeneousSubstitutionProcess* createNonHomogeneousSubstitutionProcess(
     std::shared_ptr<BranchModel> model,
     std::shared_ptr<DiscreteDistribution> rdist,
-    ParametrizablePhyloTree* tree,
+    std::shared_ptr<PhyloTree> tree,
     std::shared_ptr<FrequencySet> rootFreqs,
     const std::vector<std::string>& globalParameterNames,
     std::shared_ptr<ModelScenario> scenario = 0

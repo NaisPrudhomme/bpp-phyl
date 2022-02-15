@@ -45,20 +45,20 @@
 
 #include "../Model/MixedTransitionModel.h"
 #include "NonHomogeneousSubstitutionProcess.h"
+#include "RateAcrossSitesSubstitutionProcess.h"
+#include "SimpleSubstitutionProcess.h"
 
 using namespace bpp;
 using namespace std;
 
 NonHomogeneousSubstitutionProcess::NonHomogeneousSubstitutionProcess(const NonHomogeneousSubstitutionProcess& set) :
   AbstractParameterAliasable(set),
-  AbstractSubstitutionProcess(set),
+  AbstractAutonomousSubstitutionProcess(set),
   modelSet_(set.modelSet_.size()),
-  rootFrequencies_(set.stationarity_ ? 0 : dynamic_cast<FrequencySet*>(set.rootFrequencies_->clone())),
   rDist_                (set.rDist_ ? dynamic_cast<DiscreteDistribution*>(set.rDist_->clone()) : 0),
   nodeToModel_          (set.nodeToModel_),
   modelToNodes_         (set.modelToNodes_),
-  modelParameters_      (set.modelParameters_),
-  stationarity_         (set.stationarity_)
+  modelParameters_      (set.modelParameters_)
 {
   // Duplicate all model objects:
   for (size_t i = 0; i < set.modelSet_.size(); i++)
@@ -78,16 +78,10 @@ NonHomogeneousSubstitutionProcess& NonHomogeneousSubstitutionProcess::operator=(
   clear();
 
   AbstractParameterAliasable::operator=(set);
-  AbstractSubstitutionProcess::operator=(set);
+  AbstractAutonomousSubstitutionProcess::operator=(set);
   nodeToModel_         = set.nodeToModel_;
   modelToNodes_        = set.modelToNodes_;
   modelParameters_     = set.modelParameters_;
-  stationarity_        = set.stationarity_;
-
-  if (set.stationarity_)
-    rootFrequencies_ = std::shared_ptr<FrequencySet>(0);
-  else
-    rootFrequencies_ = std::shared_ptr<FrequencySet>(dynamic_cast<FrequencySet*>(set.rootFrequencies_->clone()));
 
   rDist_.reset(rDist_ ? dynamic_cast<DiscreteDistribution*>(set.rDist_->clone()) : 0);
 
@@ -114,25 +108,10 @@ void NonHomogeneousSubstitutionProcess::clear()
   resetParameters_();
 
   modelSet_.clear();
-  rootFrequencies_.reset();
   rDist_.reset();
   nodeToModel_.clear();
   modelParameters_.clear();
-
-  stationarity_ = true;
 }
-
-void NonHomogeneousSubstitutionProcess::setRootFrequencies(FrequencySet* rootFreqs)
-{
-  if (rootFreqs)
-  {
-    addParameters_(rootFreqs->getIndependentParameters());
-    stationarity_ = false;
-
-    rootFrequencies_.reset(rootFreqs);
-  }
-}
-
 
 void NonHomogeneousSubstitutionProcess::setModelToNode(size_t modelIndex, unsigned int nodeNumber)
 {
@@ -147,9 +126,9 @@ void NonHomogeneousSubstitutionProcess::setModelToNode(size_t modelIndex, unsign
 
 void NonHomogeneousSubstitutionProcess::addModel(std::shared_ptr<BranchModel> model, const std::vector<unsigned int>& nodesId)
 {
-  if (modelSet_.size() > 0 && model->getAlphabet()->getAlphabetType() != modelSet_[0]->getAlphabet()->getAlphabetType())
+  if (modelSet_.size() > 0 && model->getAlphabet()->getAlphabetType() != getAlphabet()->getAlphabetType())
     throw Exception("NonHomogeneousSubstitutionProcess::addModel. A Substitution Model cannot be added to a Substituion Process if it does not have the same alphabet.");
-  if (modelSet_.size() > 0 && model->getNumberOfStates() != modelSet_[0]->getNumberOfStates())
+  if (modelSet_.size() > 0 && model->getNumberOfStates() != getNumberOfStates())
     throw Exception("NonHomogeneousSubstitutionProcess::addModel. A Substitution Model cannot be added to a Substitution Process if it does not have the same number of states.");
 
   modelSet_.push_back(model);
@@ -178,9 +157,9 @@ void NonHomogeneousSubstitutionProcess::addModel(std::shared_ptr<BranchModel> mo
 
 void NonHomogeneousSubstitutionProcess::setModel(std::shared_ptr<BranchModel> model, size_t modelIndex)
 {
-  if (modelSet_.size() > 0 && model->getAlphabet()->getAlphabetType() != modelSet_[0]->getAlphabet()->getAlphabetType())
+  if (modelSet_.size() > 0 && model->getAlphabet()->getAlphabetType() != getAlphabet()->getAlphabetType())
     throw Exception("NonHomogeneousSubstitutionProcess::setModel. A Substitution Model cannot be added to a Substituion Process if it does not have the same alphabet.");
-  if (modelSet_.size() > 0 && model->getNumberOfStates() != modelSet_[0]->getNumberOfStates())
+  if (modelSet_.size() > 0 && model->getNumberOfStates() != getNumberOfStates())
     throw Exception("NonHomogeneousSubstitutionProcess::setModel. A Substitution Model cannot be added to a Substitution Process if it does not have the same number of states.");
 
   if (modelIndex >= modelSet_.size())
@@ -222,9 +201,6 @@ void NonHomogeneousSubstitutionProcess::listModelNames(std::ostream& out) const
 
 void NonHomogeneousSubstitutionProcess::fireParameterChanged(const ParameterList& parameters)
 {
-  // Update root frequencies:
-  updateRootFrequencies();
-
   // Update rate distribution:
   if (rDist_)
     rDist_->matchParametersValues(parameters);
@@ -240,7 +216,7 @@ void NonHomogeneousSubstitutionProcess::fireParameterChanged(const ParameterList
     modelSet_[i]->matchParametersValues(modelParameters_[i]);
   }
 
-  AbstractSubstitutionProcess::fireParameterChanged(parameters);
+  AbstractAutonomousSubstitutionProcess::fireParameterChanged(parameters);
 }
 
 
@@ -267,8 +243,15 @@ ParameterList NonHomogeneousSubstitutionProcess::getSubstitutionModelParameters(
 
 bool NonHomogeneousSubstitutionProcess::checkOrphanNodes(bool throwEx) const
 {
-  vector<unsigned int> ids = getParametrizablePhyloTree().getAllNodesIndexes();
-  unsigned int rootId = getParametrizablePhyloTree().getNodeIndex(getParametrizablePhyloTree().getRoot());
+  if (!getParametrizablePhyloTree())
+  {
+    if (throwEx)
+      throw Exception("NonHomogeneousSubstitutionProcess::checkOrphanNodes(). No tree provided.");
+    return false;
+  }
+
+  vector<unsigned int> ids = getParametrizablePhyloTree()->getAllNodesIndexes();
+  unsigned int rootId = getParametrizablePhyloTree()->getNodeIndex(getParametrizablePhyloTree()->getRoot());
   for (size_t i = 0; i < ids.size(); i++)
   {
     if (ids[i] != rootId && nodeToModel_.find(ids[i]) == nodeToModel_.end())
@@ -283,9 +266,15 @@ bool NonHomogeneousSubstitutionProcess::checkOrphanNodes(bool throwEx) const
 
 bool NonHomogeneousSubstitutionProcess::checkUnknownNodes(bool throwEx) const
 {
-  vector<unsigned int> ids = getParametrizablePhyloTree().getAllNodesIndexes();
+  if (!getParametrizablePhyloTree())
+  {
+    if (throwEx)
+      throw Exception("NonHomogeneousSubstitutionProcess::checkUnknownNodes(). No tree provided.");
+    return false;
+  }
+  vector<unsigned int> ids = getParametrizablePhyloTree()->getAllNodesIndexes();
   unsigned int id;
-  unsigned int rootId = getParametrizablePhyloTree().getNodeIndex(getParametrizablePhyloTree().getRoot());
+  unsigned int rootId = getParametrizablePhyloTree()->getNodeIndex(getParametrizablePhyloTree()->getRoot());
 
   std::map<size_t, std::vector<unsigned int> >::const_iterator it;
 
@@ -309,7 +298,7 @@ bool NonHomogeneousSubstitutionProcess::hasMixedTransitionModel() const
 {
   for (size_t i = 1; i <= getNumberOfModels(); i++)
   {
-    if (dynamic_cast<const MixedTransitionModel*>(getModel(i)) != NULL)
+    if (dynamic_pointer_cast<const MixedTransitionModel>(getModel(i)) != NULL)
       return true;
   }
   return false;
@@ -330,47 +319,29 @@ void NonHomogeneousSubstitutionProcess::setModelScenario(std::shared_ptr<ModelSc
 }
 
 
-/*
- * Inheriting from SubstitutionProcess
- */
-bool NonHomogeneousSubstitutionProcess::isCompatibleWith(const AlignedValuesContainer& data) const
-{
-  if (modelSet_.size() > 0)
-    return data.getAlphabet()->getAlphabetType() == modelSet_[0]->getAlphabet()->getAlphabetType();
-  else
-    return true;
-}
-
-
-NonHomogeneousSubstitutionProcess* NonHomogeneousSubstitutionProcess::createHomogeneousSubstitutionProcess(
+AbstractAutonomousSubstitutionProcess* NonHomogeneousSubstitutionProcess::createHomogeneousSubstitutionProcess(
   std::shared_ptr<BranchModel> model,
   std::shared_ptr<DiscreteDistribution> rdist,
-  ParametrizablePhyloTree* tree,
+  std::shared_ptr<PhyloTree> tree,
   std::shared_ptr<FrequencySet> rootFreqs,
   shared_ptr<ModelScenario> scenario)
 {
+  if (!tree)
+    throw Exception("NonHomogeneousSubstitutionProcess::createHomogeneousSubstitutionProcess: missing tree.");
+  
   // Check alphabet:
   if  (rootFreqs && model->getAlphabet()->getAlphabetType() != rootFreqs->getAlphabet()->getAlphabetType())
     throw AlphabetMismatchException("NonHomogeneousSubstitutionProcess::createHomogeneousModelSet()", model->getAlphabet(), rootFreqs->getAlphabet());
 
-  NonHomogeneousSubstitutionProcess*  modelSet = rootFreqs ? new NonHomogeneousSubstitutionProcess(rdist, tree, rootFreqs->clone()) : new NonHomogeneousSubstitutionProcess(rdist, tree);
+  AbstractAutonomousSubstitutionProcess* modelSet;
 
-  // We assign this model to all nodes in the tree (excepted root node), and link all parameters with it.
-  vector<unsigned int> ids = tree->getAllNodesIndexes();
-  unsigned int rootId = tree->getNodeIndex(tree->getRoot());
+  if (!rdist)
+    modelSet = new SimpleSubstitutionProcess(model, tree);
+  else
+    modelSet = new RateAcrossSitesSubstitutionProcess(model, rdist, tree);
 
-  unsigned int pos = 0;
-  for (unsigned int i = 0; i < ids.size(); i++)
-  {
-    if (ids[i] == rootId)
-    {
-      pos = i;
-      break;
-    }
-  }
-  ids.erase(ids.begin() + pos);
-
-  modelSet->addModel(model, ids);
+  if (rootFreqs)
+    modelSet->setRootFrequencySet(std::shared_ptr<FrequencySet>(rootFreqs->clone()));
 
   if (scenario)
     modelSet->setModelScenario(scenario);
@@ -381,11 +352,14 @@ NonHomogeneousSubstitutionProcess* NonHomogeneousSubstitutionProcess::createHomo
 NonHomogeneousSubstitutionProcess* NonHomogeneousSubstitutionProcess::createNonHomogeneousSubstitutionProcess(
   std::shared_ptr<BranchModel> model,
   std::shared_ptr<DiscreteDistribution> rdist,
-  ParametrizablePhyloTree* tree,
+  std::shared_ptr<PhyloTree> tree,
   std::shared_ptr<FrequencySet> rootFreqs,
   const vector<string>& globalParameterNames,
   shared_ptr<ModelScenario> scenario)
 {
+  if (!tree)
+    throw Exception("NonHomogeneousSubstitutionProcess::createNonHomogeneousSubstitutionProcess: missing tree.");
+
   // Check alphabet:
   if (rootFreqs && model->getAlphabet()->getAlphabetType() != rootFreqs->getAlphabet()->getAlphabetType())
     throw AlphabetMismatchException("NonHomogeneousSubstitutionProcess::createNonHomogeneousModelSet()", model->getAlphabet(), rootFreqs->getAlphabet());
@@ -448,24 +422,7 @@ NonHomogeneousSubstitutionProcess* NonHomogeneousSubstitutionProcess::createNonH
     }
   }
 
-  // bool mixed = (dynamic_cast<MixedSubstitutionModel*>(model) != NULL);
-  NonHomogeneousSubstitutionProcess*  modelSet;
-  // if (mixed)
-  // {
-  //   modelSet = new MixedNonHomogeneousSubstitutionProcess(model->getAlphabet());
-  //   // Remove the "relproba" parameters from the branch parameters and put them in the global parameters, for the hypernodes
-  //   for (i = branchParameters.size(); i > 0; i--)
-  //   {
-  //     if (branchParameters[i - 1].getName().find("relproba") != string::npos)
-  //     {
-  //       globalParameters.addParameter(branchParameters[i - 1]);
-  //       branchParameters.deleteParameter(i - 1);
-  //     }
-  //   }
-  // }
-  // else
-
-  modelSet = new NonHomogeneousSubstitutionProcess(rdist, tree, rootFreqs->clone());
+  NonHomogeneousSubstitutionProcess*  modelSet = new NonHomogeneousSubstitutionProcess(rdist, tree, rootFreqs);
 
   // We assign a copy of this model to all nodes in the tree (excepted root node), and link all parameters with it.
   vector<unsigned int> ids = tree->getAllNodesIndexes();
@@ -500,7 +457,7 @@ NonHomogeneousSubstitutionProcess* NonHomogeneousSubstitutionProcess::createNonH
   }
 
   if (scenario)
-    throw Exception("NonHomogeneousSubstitutionProcess::createNonHomogeneousModelSet : setModelScenario(scenario) to be fixed.");
+    throw Exception("NonHomogeneousSubstitutionProcess::createNonHomogeneousModelSet : setModelScenario(scenario) to be implemented.");
 
   // Defines the hypernodes if mixed
   // if (mixed)

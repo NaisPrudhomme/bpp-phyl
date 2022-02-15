@@ -44,49 +44,6 @@
 using namespace bpp;
 using namespace std;
 
-AbstractSubstitutionProcess::AbstractSubstitutionProcess(ParametrizablePhyloTree* tree, size_t nbClasses, const string& prefix) :
-  AbstractParameterAliasable(prefix),
-  pTree_(tree),
-  nbClasses_(nbClasses),
-  modelScenario_(0)
-{
-  if (!tree)
-    throw Exception("AbstractSubstitutionProcess. A tree instance must be provided.");
-  // Add parameters:
-  addParameters_(tree->getParameters());  // Branch lengths
-}
-
-AbstractSubstitutionProcess::AbstractSubstitutionProcess(const AbstractSubstitutionProcess& asp) :
-  AbstractParameterAliasable(asp),
-  pTree_(asp.pTree_->clone()),
-  nbClasses_(asp.nbClasses_),
-  modelScenario_(asp.modelScenario_) // this has to be specified by inheriting class to follow model links
-{}
-
-AbstractSubstitutionProcess& AbstractSubstitutionProcess::operator=(const AbstractSubstitutionProcess& asp)
-{
-  AbstractParameterAliasable::operator=(*this);
-
-  pTree_.reset(pTree_->clone());
-  nbClasses_ = asp.nbClasses_;
-  modelScenario_ = asp.modelScenario_; // this has to be specified by inheriting class to follow model links
-  return *this;
-}
-
-void AbstractSubstitutionProcess::setPhyloTree(const PhyloTree& phyloTree)
-{
-  if (pTree_)
-  {
-    getParameters_().deleteParameters(pTree_->getParameters().getParameterNames(), false);
-    pTree_.release();
-  }
-
-  
-  pTree_=std::unique_ptr<ParametrizablePhyloTree>(new ParametrizablePhyloTree(phyloTree));
-  addParameters_(pTree_->getParameters()); 
-
-}
-  
 ParameterList AbstractSubstitutionProcess::getNonDerivableParameters() const
 {
   ParameterList pl = getSubstitutionModelParameters(true);
@@ -99,10 +56,3 @@ ParameterList AbstractSubstitutionProcess::getNonDerivableParameters() const
   return pl;
 }
 
-void AbstractSubstitutionProcess::fireParameterChanged(const ParameterList& pl)
-{
-  ParameterList gAP = getAliasedParameters(pl);
-  gAP.addParameters(pl);
-
-  pTree_->matchParametersValues(gAP);
-}

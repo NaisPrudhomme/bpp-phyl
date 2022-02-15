@@ -44,9 +44,21 @@
 using namespace bpp;
 using namespace std;
 
-SimpleSubstitutionProcess::SimpleSubstitutionProcess(std::shared_ptr<BranchModel> model, ParametrizablePhyloTree* tree) :
+SimpleSubstitutionProcess::SimpleSubstitutionProcess(std::shared_ptr<BranchModel> model, std::shared_ptr<ParametrizablePhyloTree> tree, std::shared_ptr<FrequencySet> rootFrequencies) :
   AbstractParameterAliasable(""),
-  AbstractSubstitutionProcess(tree, 1, model ? model->getNamespace() : ""),
+  AbstractAutonomousSubstitutionProcess(tree, rootFrequencies, model ? model->getNamespace() : ""),
+  model_(model)
+{
+  if (!model)
+    throw Exception("SimpleSubstitutionProcess. A model instance must be provided.");
+
+  // Add parameters:
+  addParameters_(model->getIndependentParameters()); // Substitution model
+}
+
+SimpleSubstitutionProcess::SimpleSubstitutionProcess(std::shared_ptr<BranchModel> model, std::shared_ptr<const PhyloTree> tree, std::shared_ptr<FrequencySet> rootFrequencies) :
+  AbstractParameterAliasable(""),
+  AbstractAutonomousSubstitutionProcess(tree, rootFrequencies, model ? model->getNamespace() : ""),
   model_(model)
 {
   if (!model)
@@ -58,7 +70,7 @@ SimpleSubstitutionProcess::SimpleSubstitutionProcess(std::shared_ptr<BranchModel
 
 SimpleSubstitutionProcess::SimpleSubstitutionProcess(const SimpleSubstitutionProcess& ssp) :
   AbstractParameterAliasable(ssp),
-  AbstractSubstitutionProcess(ssp),
+  AbstractAutonomousSubstitutionProcess(ssp),
   model_(ssp.model_->clone())
 {
   if (modelScenario_)
@@ -68,7 +80,7 @@ SimpleSubstitutionProcess::SimpleSubstitutionProcess(const SimpleSubstitutionPro
 SimpleSubstitutionProcess& SimpleSubstitutionProcess::operator=(const SimpleSubstitutionProcess& ssp)
 {
   AbstractParameterAliasable::operator=(ssp);
-  AbstractSubstitutionProcess::operator=(ssp);
+  AbstractAutonomousSubstitutionProcess::operator=(ssp);
   model_.reset(ssp.model_->clone());
 
   if (modelScenario_)
@@ -96,7 +108,7 @@ void SimpleSubstitutionProcess::setModelScenario(std::shared_ptr<ModelScenario> 
 void SimpleSubstitutionProcess::fireParameterChanged(const ParameterList& pl)
 {
   // Transition probabilities have changed and need to be recomputed:
-  AbstractSubstitutionProcess::fireParameterChanged(pl);
+  AbstractAutonomousSubstitutionProcess::fireParameterChanged(pl);
 
   model_->matchParametersValues(pl);
 }

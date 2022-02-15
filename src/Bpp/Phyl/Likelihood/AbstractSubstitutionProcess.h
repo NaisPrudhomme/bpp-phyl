@@ -62,26 +62,32 @@ class AbstractSubstitutionProcess :
   public virtual SubstitutionProcess,
   public virtual AbstractParameterAliasable
 {
-protected:
-  std::unique_ptr<ParametrizablePhyloTree> pTree_;
-
-  size_t nbClasses_;
-
-  std::shared_ptr<ModelScenario> modelScenario_;
-
-protected:
-  AbstractSubstitutionProcess(ParametrizablePhyloTree* tree, size_t nbClasses, const std::string& prefix = "");
-
-  AbstractSubstitutionProcess(const AbstractSubstitutionProcess& asp);
-
-  AbstractSubstitutionProcess& operator=(const AbstractSubstitutionProcess& asp);
-
 public:
-  const ParametrizablePhyloTree& getParametrizablePhyloTree() const { return *pTree_; }
+  AbstractSubstitutionProcess(){}
+  
+  size_t getNumberOfClasses() const
+  {
+    auto dist=getRateDistribution();
+    return dist?dist->getNumberOfCategories():1;
+  }
 
-  size_t getNumberOfClasses() const { return nbClasses_; }
+  size_t getNumberOfStates() const
+  {
+    return getStateMap().getNumberOfModelStates();
+  }
 
-public:
+
+  const Alphabet* getAlphabet() const
+  {
+    return getStateMap().getAlphabet();
+  }
+
+
+  bool isCompatibleWith(const AlignedValuesContainer& data) const
+  {
+    return data.getAlphabet()->getAlphabetType() == getAlphabet()->getAlphabetType();
+  }
+
   /**
    * @brief get NonDerivable parameters
    *
@@ -89,79 +95,6 @@ public:
 
   ParameterList getNonDerivableParameters() const;
 
-  /**
-   * @brief AbsractParametrizable interface
-   *
-   **/
-
-  void fireParameterChanged(const ParameterList& pl);
-
-  /**
-   * @brief Return if process has ModelScenario.
-   *
-   **/
-  bool hasModelScenario() const
-  {
-    return modelScenario_ != 0;
-  }
-
-  /**
-   * @brief get the ModelScenario.
-   *
-   **/
-  const ModelScenario& getModelScenario() const
-  {
-    return *modelScenario_;
-  }
-
-  /**
-   * @brief set the ParametrizablePhyloTree.
-   *
-   * Will build a unique_ptr<ParametrizablePhyloTree> from the given PhyloTree
-   *
-   **/
-
-  void setPhyloTree(const PhyloTree& phyloTree);
-
-  /**
-   * @brief set the ModelScenario.
-   *
-   **/
-
-  virtual void setModelScenario(std::shared_ptr<ModelScenario> modelscenario) = 0;
-
-  /**
-   * @brief Get the transition probabilities corresponding to a certain branch, site pattern, and model class.
-   *
-   * @param nodeId The id of the node.
-   * @param classIndex The model class index.
-   */
-  const Matrix<double>& getTransitionProbabilities(unsigned int nodeId, size_t classIndex) const
-  {
-    throw Exception("AbstractSubstitutionProcess::getTransitionProbabilities not finished. Ask developpers.");
-  }
-
-  /**
-   * @brief Get the first order derivatives of the transition probabilities according to time, corresponding to a certain branch, site pattern, and model class.
-   *
-   * @param nodeId The id of the node.
-   * @param classIndex The model class index.
-   */
-  const Matrix<double>& getTransitionProbabilitiesD1(unsigned int nodeId, size_t classIndex) const
-  {
-    throw Exception("AbstractSubstitutionProcess::getTransitionProbabilitiesD1 not finished. Ask developpers.");
-  }
-
-  /**
-   * @brief Get the second order derivatives of the transition probabilities according to time, corresponding to a certain branch, site pattern, and model class.
-   *
-   * @param nodeId The id of the node.
-   * @param classIndex The model class index.
-   */
-  const Matrix<double>& getTransitionProbabilitiesD2(unsigned int nodeId, size_t classIndex) const
-  {
-    throw Exception("AbstractSubstitutionProcess::getTransitionProbabilitiesD2 not finished. Ask developpers.");
-  }
 };
 } // end namespace bpp
 #endif // BPP_PHYL_LIKELIHOOD_ABSTRACTSUBSTITUTIONPROCESS_H
